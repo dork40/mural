@@ -23,12 +23,11 @@ desktop you run.
 curl -fsSL https://raw.githubusercontent.com/dork40/mural/main/install.sh | bash
 ```
 
-On Arch you can also grab the package from the
-[latest release](https://github.com/dork40/mural/releases/latest):
+On Arch, add my pacman repo once, then it's a normal pacman install:
 
 ```sh
-curl -LO https://github.com/dork40/mural/releases/download/v0.1.0/mural-0.1.0-1-any.pkg.tar.zst
-sudo pacman -U mural-0.1.0-1-any.pkg.tar.zst
+curl -fsSL https://raw.githubusercontent.com/dork40/arch-repo/main/setup.sh | bash
+sudo pacman -S mural
 ```
 
 The install script pulls in what's needed from your distro's own repos (Arch, Fedora, Debian/Ubuntu,
