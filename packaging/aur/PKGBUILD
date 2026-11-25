@@ -1,0 +1,36 @@
+# Maintainer: dork40 <gregoryscotland@gmail.com>
+pkgname=mural
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Live wallpapers for Linux: shaders, videos and pictures on Hyprland, Sway, KDE, GNOME, XFCE and more"
+arch=('any')
+url="https://github.com/dork40/mural"
+license=('GPL-3.0-or-later')
+depends=('python' 'python-gobject' 'gtk4' 'gtk4-layer-shell' 'python-opengl'
+         'gst-plugin-gtk4' 'gst-plugins-base' 'gst-plugins-good' 'gst-libav')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+optdepends=('gst-plugin-va: hardware video decoding (much less CPU)'
+            'python-xlib: X11 desktops (XFCE, i3, Openbox, ...)'
+            'python-i3ipc: pause for fullscreen windows on Sway and i3'
+            'gamemode: pause while Feral GameMode is active')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$pkgname-$pkgver"
+    python -m build --wheel --no-isolation
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    python -c 'import sys; sys.path.insert(0, "."); from mural import shaderlib, config, library'
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    python -m installer --destdir="$pkgdir" dist/*.whl
+    install -d "$pkgdir/usr/share/gnome-shell/extensions"
+    cp -r gnome-extension/mural@dork40.github.io "$pkgdir/usr/share/gnome-shell/extensions/"
+    install -Dm644 packaging/mural.desktop "$pkgdir/etc/xdg/autostart/mural.desktop"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

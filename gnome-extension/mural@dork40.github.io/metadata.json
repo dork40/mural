@@ -1,0 +1,7 @@
+{
+  "uuid": "mural@dork40.github.io",
+  "name": "Mural",
+  "description": "Live wallpapers (shaders, videos, images) from the Mural app, placed behind your desktop. Install the mural app too: https://github.com/dork40/mural",
+  "url": "https://github.com/dork40/mural",
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
+}

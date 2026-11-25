@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/shots/
+testdata/loud-tone.mp4
+build/
+dist/
+*.egg-info/
+testdata/test-*
+testdata/

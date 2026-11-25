@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mural"
+version = "0.1.0"
+description = "Live wallpapers for every Linux desktop"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+dependencies = ["PyGObject>=3.50", "PyOpenGL>=3.1"]
+
+[project.optional-dependencies]
+sway = ["i3ipc>=2.2"]
+x11 = ["python-xlib>=0.33"]
+
+[project.scripts]
+mural = "mural.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mural*"]
+
+[tool.setuptools.package-data]
+mural = ["shaders/*.frag", "kwin/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
