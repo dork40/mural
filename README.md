@@ -23,7 +23,15 @@ desktop you run.
 curl -fsSL https://raw.githubusercontent.com/dork40/mural/main/install.sh | bash
 ```
 
-It pulls in what's needed from your distro's own repos (Arch, Fedora, Debian/Ubuntu,
+On Arch you can also grab the package from the
+[latest release](https://github.com/dork40/mural/releases/latest):
+
+```sh
+curl -LO https://github.com/dork40/mural/releases/download/v0.1.0/mural-0.1.0-1-any.pkg.tar.zst
+sudo pacman -U mural-0.1.0-1-any.pkg.tar.zst
+```
+
+The install script pulls in what's needed from your distro's own repos (Arch, Fedora, Debian/Ubuntu,
 openSUSE, Bazzite/Silverblue), installs Mural into `~/.local`, and starts it with your desktop.
 Read the script first if you like, it's short. `install.sh --uninstall` takes it back out.
 

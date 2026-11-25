@@ -45,10 +45,10 @@ done
 install_deps() {
     case $family in
     arch)
-        sudo pacman -S --needed --noconfirm python python-gobject gtk4 gtk4-layer-shell python-opengl \
+        sudo pacman -S --needed --noconfirm python python-gobject python-cairo gtk4 gtk4-layer-shell python-opengl \
             gst-plugin-gtk4 gst-plugins-base gst-plugins-good gst-libav gst-plugin-va python-xlib python-i3ipc ;;
     fedora)
-        local p="python3-gobject gtk4 gtk4-layer-shell python3-pyopengl gstreamer1-plugins-base gstreamer1-plugins-good
+        local p="python3-gobject python3-cairo gtk4 gtk4-layer-shell python3-pyopengl gstreamer1-plugins-base gstreamer1-plugins-good
                  gstreamer1-plugin-gtk4 gstreamer1-plugin-libav gstreamer1-plugins-bad-free python3-xlib python3-i3ipc"
         if [[ -e /run/ostree-booted ]]; then
             note "atomic system (Silverblue/Bazzite/...): layering with rpm-ostree, a reboot finishes it"
@@ -60,7 +60,7 @@ install_deps() {
         fi ;;
     debian)
         sudo apt-get update -q
-        local p="python3 python3-gi gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 python3-opengl
+        local p="python3 python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 python3-opengl
                  gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav gstreamer1.0-gtk4
                  python3-xlib python3-i3ipc"
         # layer-shell and VA-API decoding are newer packages: add them when the release has them
@@ -70,7 +70,7 @@ install_deps() {
         # shellcheck disable=SC2086
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y $p ;;
     suse)
-        sudo zypper -n install python3-gobject typelib-1_0-Gtk-4_0 gtk4-layer-shell typelib-1_0-Gtk4LayerShell-1_0 \
+        sudo zypper -n install python3-gobject python3-gobject-cairo typelib-1_0-Gtk-4_0 gtk4-layer-shell typelib-1_0-Gtk4LayerShell-1_0 \
             python3-PyOpenGL gstreamer-plugins-base gstreamer-plugins-good gstreamer-plugin-gtk4 gstreamer-plugins-libav \
             python3-python-xlib python3-i3ipc ;;
     *)
