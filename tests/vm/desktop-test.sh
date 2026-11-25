@@ -102,11 +102,7 @@ sleep 6; insess "$M status" | tee -a "$LOG"; shot image
 insess "$M set aurora" >/dev/null 2>&1; sleep 4
 
 say "fullscreen auto-pause"
-case $de in
-  hyprland) insess "hyprctl eval 'hl.dispatch(hl.dsp.window.fullscreen())' >/dev/null 2>&1 || hyprctl dispatch fullscreen 0" ;;
-  sway)     insess "swaymsg exec foot >/dev/null; sleep 4; swaymsg fullscreen enable >/dev/null" ;;
-  *)        insess "nohup python3 tests/vm/fullwin.py >/tmp/full.log 2>&1 &" ;;
-esac
+insess "setsid -f python3 tests/vm/fullwin.py </dev/null >/tmp/full.log 2>&1"
 sleep 6; insess "$M status" | tee -a "$LOG"; shot fullscreen
 insess "pkill -f fullwin.py; true"; sleep 4
 say "after closing it:"; insess "$M status" | tee -a "$LOG"

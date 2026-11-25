@@ -297,7 +297,11 @@ class PauseManager(GObject.Object):
             except Exception:  # noqa: BLE001 - window went away
                 return []
         full = []
-        for wid in prop(root, "_NET_CLIENT_LIST_STACKING"):
+        active = prop(root, "_NET_ACTIVE_WINDOW")
+        ids = list(prop(root, "_NET_CLIENT_LIST_STACKING"))
+        if active and active[0] and active[0] not in ids:   # i3 leaves some windows out of the list
+            ids.append(active[0])
+        for wid in ids:
             win = d.create_resource_object("window", wid)
             if wid not in watched:                          # hear about its state changes too
                 try:
@@ -314,7 +318,6 @@ class PauseManager(GObject.Object):
                 except Exception:  # noqa: BLE001
                     pass
         cls = None
-        active = prop(root, "_NET_ACTIVE_WINDOW")
         if active and active[0]:
             try:
                 wm = d.create_resource_object("window", active[0]).get_wm_class()

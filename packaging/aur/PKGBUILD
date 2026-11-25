@@ -1,6 +1,6 @@
 # Maintainer: dork40 <gregoryscotland@gmail.com>
 pkgname=mural
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Live wallpapers for Linux: shaders, videos and pictures on Hyprland, Sway, KDE, GNOME, XFCE and more"
 arch=('any')
@@ -14,7 +14,7 @@ optdepends=('gst-plugin-va: hardware video decoding (much less CPU)'
             'python-i3ipc: pause for fullscreen windows on Sway and i3'
             'gamemode: pause while Feral GameMode is active')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('a65d987a8133bbba62f2a7decf4ebfc06d86d2d730e8dd83fccdb9a224ff436e')
+sha256sums=('SKIP')
 
 build() {
     cd "$pkgname-$pkgver"
