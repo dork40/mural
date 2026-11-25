@@ -14,7 +14,7 @@ optdepends=('gst-plugin-va: hardware video decoding (much less CPU)'
             'python-i3ipc: pause for fullscreen windows on Sway and i3'
             'gamemode: pause while Feral GameMode is active')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('2aa939600fd72f9e5aa9654682e120494cab9f9410aabecbf6ea5bde6957d0e9')
 
 build() {
     cd "$pkgname-$pkgver"
