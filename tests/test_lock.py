@@ -39,6 +39,14 @@ def test_set_background_only_touches_the_path_line():
     assert out.count("path =") == 1                     # no duplicate path line
 
 
+def test_set_background_writes_a_clean_path_no_trailing_comment():
+    # hyprlock does not strip an inline `# ...`, so the path line must be only the path
+    out = lock.set_background(HYPRLOCK, "/home/me/.cache/mural/lock.png")
+    line = next(ln for ln in out.splitlines() if ln.strip().startswith("path ="))
+    assert line.strip() == "path = /home/me/.cache/mural/lock.png"
+    assert "#" not in line
+
+
 def test_set_background_is_idempotent():
     once = lock.set_background(HYPRLOCK, str(lock.LOCK_IMAGE))
     twice = lock.set_background(once, str(lock.LOCK_IMAGE))

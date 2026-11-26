@@ -18,7 +18,6 @@ from . import const
 LOCK_IMAGE = const.CACHE_DIR / "lock.png"
 CONFIG_PATH = Path.home() / ".config" / "hypr" / "hyprlock.conf"
 PREV_PATH = const.STATE_DIR / "hyprlock-previous-path"
-MARK = "  # Mural"
 
 
 # -- what's on this machine ------------------------------------------------------------------
@@ -76,10 +75,10 @@ def set_background(text, image):
     k = _path_line(lines, block)
     if k is not None:
         indent = re.match(r"(\s*)", lines[k]).group(1)
-        lines[k] = f"{indent}path = {image}{MARK}"
+        lines[k] = f"{indent}path = {image}"
     else:
         indent = re.match(r"(\s*)", lines[block[0]]).group(1) + "    "
-        lines.insert(block[0] + 1, f"{indent}path = {image}{MARK}")
+        lines.insert(block[0] + 1, f"{indent}path = {image}")
     return "\n".join(lines) + ("\n" if keep_nl else "")
 
 
@@ -151,8 +150,12 @@ def disable():
     prev = PREV_PATH.read_text().strip() if PREV_PATH.exists() else ""
     shutil.copyfile(conf, conf.with_suffix(conf.suffix + ".mural.bak"))
     if prev:
-        conf.write_text(set_background(text, prev).replace(f"path = {prev}{MARK}", f"path = {prev}"))
-    else:  # nothing was there before: drop the managed line
-        lines = [ln for ln in text.splitlines() if not ln.strip().endswith(MARK.strip())]
+        conf.write_text(set_background(text, prev))
+    else:  # nothing was there before: drop the path line we added
+        lines = text.splitlines()
+        block = _first_background_block(lines)
+        k = _path_line(lines, block) if block else None
+        if k is not None:
+            del lines[k]
         conf.write_text("\n".join(lines) + ("\n" if text.endswith("\n") else ""))
     PREV_PATH.unlink(missing_ok=True)
