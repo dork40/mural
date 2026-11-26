@@ -249,6 +249,18 @@ def main():
                     if isinstance(win.view, ShaderView):
                         win.view.set_fps(self.cfg["fps"])
             self.apply_wallpapers()
+            if self.cfg.get("lock_screen"):
+                GLib.timeout_add(600, self._refresh_lock)   # let the new frame draw first
+
+        def _refresh_lock(self):
+            """Snapshot the current wallpaper and copy it to hyprlock's lock image."""
+            from . import lock
+            try:
+                self.snapshot()
+                lock.save_lock_image()
+            except Exception as e:  # noqa: BLE001 - a failed refresh must never take the daemon down
+                log.info("lock image not refreshed: %s", e)
+            return False
 
         def reload_palette(self):
             new = palette.load(self.cfg["colors"])

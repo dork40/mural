@@ -155,6 +155,55 @@ def cmd_simple(action):
     return run
 
 
+def cmd_lock(args):
+    from . import lock
+    if not lock.hyprlock_installed():
+        print("hyprlock isn't installed, so there's no lock screen to set.", file=sys.stderr)
+        return 1
+
+    def refresh():
+        """Snapshot the live wallpaper and copy it to the lock image."""
+        if daemon_running():
+            daemon_action("snapshot")
+            for _ in range(20):
+                if lock.snapshot_files():
+                    break
+                time.sleep(0.1)
+        return lock.save_lock_image()
+
+    cfg = config.load()
+    if args.state == "off":
+        try:
+            lock.disable()
+        except OSError as e:
+            print(f"Couldn't update hyprlock.conf: {e}", file=sys.stderr)
+            return 1
+        cfg["lock_screen"] = False
+        config.save(cfg)
+        print("Lock screen back to normal.")
+        return 0
+
+    # on / update
+    if lock.config_path() is None:
+        print("hyprlock has no config at ~/.config/hypr/hyprlock.conf yet.", file=sys.stderr)
+        return 1
+    if not refresh() and args.state == "update":
+        print("Mural isn't running, so there's no wallpaper to snapshot yet.", file=sys.stderr)
+        return 1
+    if args.state == "on":
+        try:
+            lock.enable()
+        except (OSError, RuntimeError) as e:
+            print(f"Couldn't update hyprlock.conf: {e}", file=sys.stderr)
+            return 1
+        cfg["lock_screen"] = True
+        config.save(cfg)
+        print("Your wallpaper is on the lock screen now (hyprlock).")
+    else:
+        print("Lock screen image updated.")
+    return 0
+
+
 def cmd_status(args):
     if not daemon_running():
         print("Mural isn't running.")
@@ -194,6 +243,10 @@ def main(argv=None):
     sub.add_parser("status", help="what is playing and whether it is paused").set_defaults(func=cmd_status)
     sub.add_parser("snapshot", help="save each screen's current frame to ~/.cache/mural").set_defaults(
         func=cmd_simple("snapshot"))
+    p = sub.add_parser("lock", help="use your wallpaper on the hyprlock lock screen")
+    p.add_argument("state", nargs="?", choices=["on", "off", "update"], default="update",
+                   help="on: turn it on   off: restore your old lock screen   update: refresh the image")
+    p.set_defaults(func=cmd_lock)
     args = ap.parse_args(argv)
     if not args.cmd:                      # plain `mural` (and the app menu) opens the window
         from .gui import main as gui_main

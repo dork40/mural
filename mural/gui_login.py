@@ -1,5 +1,6 @@
 """The "Login screen" tab: put a Mural wallpaper behind the SDDM login box."""
 import threading
+import time
 
 import gi
 
@@ -7,7 +8,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
-from . import library, login  # noqa: E402
+from . import library, lock, login  # noqa: E402
 
 KIND_LABEL = {"shader": "Animated", "video": "Video", "image": "Image"}
 QUALITY_KEYS = ["sharp", "balanced", "light"]
@@ -22,10 +23,16 @@ class LoginPage(Gtk.Box):
         self.busy = False
 
         if not login.sddm_installed():
-            self.append(Adw.StatusPage(icon_name="system-lock-screen-symbolic", vexpand=True,
-                                       title="Your login screen isn't SDDM",
-                                       description="Mural can change the login screen on systems that use SDDM "
-                                                   "(KDE, most Arch and Hyprland setups). Yours uses something else."))
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            box.append(Adw.StatusPage(icon_name="system-lock-screen-symbolic", vexpand=not lock.hyprlock_installed(),
+                                      title="Your login screen isn't SDDM",
+                                      description="Mural can change the login screen on systems that use SDDM "
+                                                  "(KDE, most Arch and Hyprland setups). Yours uses something else."))
+            if lock.hyprlock_installed():
+                lock_page = Adw.PreferencesPage()
+                lock_page.add(self._lock_group())
+                box.append(lock_page)
+            self.append(box)
             return
 
         page = Adw.PreferencesPage()
@@ -80,6 +87,9 @@ class LoginPage(Gtk.Box):
         disp.add(self.rate_row)
         page.add(disp)
         self._load_mode(login.login_display())
+
+        if lock.hyprlock_installed():
+            page.add(self._lock_group())
 
         actions = Adw.PreferencesGroup()
         box = Gtk.Box(spacing=10, halign=Gtk.Align.END)
@@ -285,6 +295,90 @@ class LoginPage(Gtk.Box):
         if err:
             self.window.toast(err)
         return False
+
+    # -- lock screen (hyprlock) ----------------------------------------------------------------
+    def _lock_group(self):
+        self._lock_busy = False
+        g = Adw.PreferencesGroup(
+            title="Lock screen (hyprlock)",
+            description="hyprlock shows a still image, so Mural keeps a snapshot of your wallpaper on "
+                        "the lock screen and refreshes it whenever you change wallpaper. Your blur, "
+                        "clock and password box stay exactly as they are.")
+        self.lock_switch = Adw.SwitchRow(title="Use my wallpaper on the lock screen")
+        self.lock_switch.set_active(lock.current_state()["managed"])
+        self.lock_switch.connect("notify::active", lambda *_: self._on_lock_toggle())
+        g.add(self.lock_switch)
+        self.lock_update_row = Adw.ActionRow(title="Update the lock image now",
+                                             subtitle="Match it to what's on your screen this second")
+        btn = Gtk.Button(label="Update", valign=Gtk.Align.CENTER, css_classes=["flat"])
+        btn.connect("clicked", lambda *_: self._refresh_lock_image(True))
+        self.lock_update_row.add_suffix(btn)
+        self.lock_update_row.set_activatable_widget(btn)
+        g.add(self.lock_update_row)
+        self.lock_update_row.set_visible(self.lock_switch.get_active())
+        return g
+
+    def _snapshot_now(self):
+        """Ask the daemon for a fresh snapshot and wait for it (runs on a worker thread)."""
+        from . import cli
+        if cli.daemon_running():
+            cli.daemon_action("snapshot")
+            for _ in range(20):
+                if lock.snapshot_files():
+                    break
+                time.sleep(0.1)
+
+    def _on_lock_toggle(self):
+        if self._lock_busy:
+            return
+        on = self.lock_switch.get_active()
+        self.lock_update_row.set_visible(on)
+        self.lock_switch.set_sensitive(False)
+
+        def work():
+            err = None
+            try:
+                if on:
+                    self._snapshot_now()
+                    lock.save_lock_image()
+                    lock.enable()
+                else:
+                    lock.disable()
+                from . import cli, config
+                cfg = config.load()
+                cfg["lock_screen"] = on
+                config.save(cfg)
+                if cli.daemon_running():
+                    cli.daemon_action("reload")
+            except Exception as e:  # noqa: BLE001
+                err = str(e)
+            GLib.idle_add(self._lock_toggle_done, on, err)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _lock_toggle_done(self, on, err):
+        self.lock_switch.set_sensitive(True)
+        if err:
+            self._lock_busy = True
+            self.lock_switch.set_active(not on)
+            self.lock_update_row.set_visible(not on)
+            self._lock_busy = False
+            self.window.toast(err)
+        else:
+            self.window.toast("Your wallpaper is on the lock screen now" if on
+                              else "Lock screen back to how it was")
+        return False
+
+    def _refresh_lock_image(self, toast=False):
+        def work():
+            try:
+                self._snapshot_now()
+                ok = lock.save_lock_image()
+            except Exception:  # noqa: BLE001
+                ok = False
+            if toast:
+                GLib.idle_add(self.window.toast,
+                              "Lock image updated" if ok else "Couldn't update it — is Mural running?")
+        threading.Thread(target=work, daemon=True).start()
 
     def restore(self):
         if self.busy:

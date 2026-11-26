@@ -17,6 +17,7 @@ DEFAULTS = {
     "pause_on_game": True,         # a game is focused anywhere
     "pause_on_gamemode": True,     # Feral GameMode is active
     "pause_on_battery": False,     # running on battery
+    "lock_screen": False,          # keep hyprlock's background matched to the wallpaper
 }
 
 FPS_RANGE = (5, 144)
