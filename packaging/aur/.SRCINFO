@@ -1,6 +1,6 @@
 pkgbase = mural
 	pkgdesc = Live wallpapers for Linux: shaders, videos and pictures on Hyprland, Sway, KDE, GNOME, XFCE and more
-	pkgver = 0.3.0
+	pkgver = 0.3.1
 	pkgrel = 1
 	url = https://github.com/dork40/mural
 	arch = any
@@ -28,7 +28,7 @@ pkgbase = mural
 	optdepends = gamemode: pause while Feral GameMode is active
 	optdepends = qt6-shadertools: animated wallpapers on the SDDM login screen
 	optdepends = qt6-multimedia: videos on the SDDM login screen
-	source = mural-0.3.0.tar.gz::https://github.com/dork40/mural/archive/refs/tags/v0.3.0.tar.gz
-	sha256sums = 52bd47abe86ad39de73b1258a15d8553135bb1267c53669c6ec44d09226db118
+	source = mural-0.3.1.tar.gz::https://github.com/dork40/mural/archive/refs/tags/v0.3.1.tar.gz
+	sha256sums = 3662e1bbde845f9812aad105ef713c6cc423b905f4fbb6eb17a9f8d0d75d623f
 
 pkgname = mural

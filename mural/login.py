@@ -77,11 +77,7 @@ def _read_sddm_conf():
 
 
 def current_state():
-    """What the login screen is set to now:
-    {"theme", "mural", "wallpaper", "full_refresh", "mode"}.
-
-    "mode" is None when the login screen is left on its default 60 Hz, "auto" when it uses each
-    screen's best mode, or a "WIDTHxHEIGHT@RATE" string when a specific mode was chosen."""
+    """What the login screen is set to now: {"theme", "mural", "wallpaper", "full_refresh"}."""
     cp = _read_sddm_conf()
     theme = cp.get("Theme", "Current", fallback="")
     wallpaper = None
@@ -93,97 +89,7 @@ def current_state():
         except (configparser.Error, OSError):
             pass
     return {"theme": theme or "default", "mural": theme == THEME_NAME, "wallpaper": wallpaper,
-            "full_refresh": DISPLAY_CONF.exists(), "mode": _configured_mode(cp)}
-
-
-def _configured_mode(cp):
-    """Read the login-screen mode back from SDDM's DisplayCommand, or None if it's the default."""
-    if not DISPLAY_CONF.exists():
-        return None
-    cmd = cp.get("X11", "DisplayCommand", fallback="")
-    parts = cmd.split()
-    if len(parts) >= 3 and "x" in parts[1]:        # /usr/lib/mural/sddm-xsetup 1920x1200 165
-        return f"{parts[1]}@{parts[2]}"
-    return "auto"
-
-
-# -- enumerating the screen's real modes ----------------------------------------------------
-def _parse_rate(text):
-    try:
-        return round(float(text.strip().rstrip("Hz*+ ")), 2)
-    except ValueError:
-        return None
-
-
-def _modes_from_hyprctl():
-    """availableModes from Hyprland, e.g. '1920x1200@165.00Hz'."""
-    import json
-    try:
-        out = subprocess.run(["hyprctl", "-j", "monitors"], capture_output=True, text=True,
-                             timeout=5).stdout
-        mons = json.loads(out)
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return []
-    modes = []
-    for m in mons:
-        for s in m.get("availableModes", []):
-            try:
-                res, rate = s.split("@")
-                w, h = res.split("x")
-                r = _parse_rate(rate)
-                if r:
-                    modes.append((int(w), int(h), r))
-            except (ValueError, TypeError):
-                continue
-    return modes
-
-
-def _modes_from_xrandr():
-    """Every mode xrandr lists for connected outputs (a real X session only)."""
-    try:
-        out = subprocess.run(["xrandr", "--query"], capture_output=True, text=True, timeout=5).stdout
-    except (OSError, subprocess.SubprocessError):
-        return []
-    modes, on = [], False
-    for line in out.splitlines():
-        if " connected" in line:
-            on = True
-            continue
-        if line and not line[0].isspace():
-            on = False
-            continue
-        if not on:
-            continue
-        parts = line.split()
-        if not parts or "x" not in parts[0]:
-            continue
-        try:
-            w, h = parts[0].split("x")
-            w, h = int(w), int(h)
-        except ValueError:
-            continue
-        for tok in parts[1:]:
-            r = _parse_rate(tok)
-            if r:
-                modes.append((w, h, r))
-    return modes
-
-
-def available_modes():
-    """A sorted, de-duplicated list of (width, height, rate) the login screen could use.
-
-    Tries Hyprland, then a real X session (xrandr); returns [] when neither can be asked (the
-    app still offers the automatic best-mode option in that case)."""
-    modes = _modes_from_hyprctl() or _modes_from_xrandr()
-    seen, uniq = set(), []
-    for w, h, r in modes:
-        key = (w, h, r)
-        if key not in seen:
-            seen.add(key)
-            uniq.append(key)
-    # biggest screen first, then fastest refresh
-    uniq.sort(key=lambda m: (m[0] * m[1], m[2]), reverse=True)
-    return uniq
+            "full_refresh": DISPLAY_CONF.exists()}
 
 
 # -- shaders: Mural's GLSL -> Qt's ShaderEffect GLSL ---------------------------------------------
