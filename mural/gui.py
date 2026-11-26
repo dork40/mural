@@ -136,7 +136,7 @@ def apply(ref, screen=ALL_SCREENS):
 def status_text(status):
     """(dot css class, sentence) for the line under the header."""
     if not status or not daemon_running():
-        return "off", "Mural is off"
+        return "off", "Off · your normal wallpaper is showing"
     if status.get("error"):
         return "off", f"Mural can't run here: {status['error']}"
     screens = status.get("screens") or {}
@@ -238,6 +238,9 @@ class Window(Adw.ApplicationWindow):
 
         view = Adw.ToolbarView()
         header = Adw.HeaderBar()
+        self.power = Gtk.Switch(valign=Gtk.Align.CENTER, tooltip_text="Turn the live wallpaper on or off")
+        self._power_sig = self.power.connect("notify::active", self._on_power)
+        header.pack_start(self.power)
         add = Gtk.Button(icon_name="list-add-symbolic", tooltip_text="Add videos or images")
         add.connect("clicked", lambda *_: self.pick_files())
         header.pack_start(add)
@@ -247,7 +250,6 @@ class Window(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append("Preferences", "app.preferences")
         menu.append("About Mural", "app.about")
-        menu.append("Turn Mural off", "app.turn-off")
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, primary=True,
                                        tooltip_text="Menu"))
         header.pack_end(self.pause_btn)
@@ -257,9 +259,6 @@ class Window(Adw.ApplicationWindow):
         header.pack_start(self.screen_dd)
         view.add_top_bar(header)
 
-        self.banner = Adw.Banner(title="Mural is off", button_label="Turn on")
-        self.banner.connect("button-clicked", lambda *_: self.turn_on())
-        view.add_top_bar(self.banner)
 
         status = Gtk.Box(spacing=8, css_classes=["status-line"])
         self.dot = Gtk.Box(css_classes=["status-dot"], valign=Gtk.Align.CENTER)
@@ -359,6 +358,14 @@ class Window(Adw.ApplicationWindow):
             return
         daemon_action("resume" if st.get("manual_pause") else "pause")
 
+    def _on_power(self, sw, _p):
+        if sw.get_active():
+            self.turn_on()
+        else:
+            if daemon_running():
+                daemon_action("quit")
+            GLib.timeout_add(700, self._on_changed)
+
     def turn_on(self):
         if not start_daemon():
             self.toasts.add_toast(Adw.Toast(title="Mural couldn't start on this desktop", timeout=4))
@@ -417,7 +424,9 @@ class Window(Adw.ApplicationWindow):
         running = daemon_running()
         st = read_status() if running else None
         cls, text = status_text(st)
-        self.banner.set_revealed(not running)
+        self.power.handler_block(self._power_sig)          # reflect the real state without re-triggering
+        self.power.set_active(running)
+        self.power.handler_unblock(self._power_sig)
         self.status_label.set_label(text)
         for c in ("paused", "off"):
             self.dot.remove_css_class(c)
@@ -510,7 +519,6 @@ class App(Adw.Application):
                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         for name, cb, ptype in (("preferences", lambda *_: Preferences().present(self.window), None),
                                 ("about", lambda *_: self.about(), None),
-                                ("turn-off", lambda *_: self.turn_off(), None),
                                 ("remove", self.remove, GLib.VariantType.new("s"))):
             a = Gio.SimpleAction.new(name, ptype)
             a.connect("activate", cb)
@@ -539,11 +547,6 @@ class App(Adw.Application):
         if not gnome_extension_enabled():
             self.window.toasts.add_toast(Adw.Toast(
                 title="Log out and back in once to finish setting Mural up on GNOME", timeout=0))
-
-    def turn_off(self):
-        if daemon_running():
-            daemon_action("quit")
-        GLib.timeout_add(600, lambda: self.window.refresh_status() or False)
 
     def remove(self, _action, param):
         p = Path(param.get_string())

@@ -39,6 +39,7 @@ Then open **Mural** from your app menu.
 - Hover an animated one to see it move.
 - **+** (or drag files onto the window) adds your own videos and images. Right-click one to
   remove it.
+- The switch at the top left turns Mural on and off. Off means your normal wallpaper is back.
 - The pause button freezes the wallpaper. The line under the title tells you if it paused by
   itself, and why.
 - With more than one screen, pick the screen at the top left before you click a wallpaper.

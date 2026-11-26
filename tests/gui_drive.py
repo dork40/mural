@@ -32,12 +32,19 @@ def steps(app):
     win = app.window
     yield 4000
     shot(win, "1-open")
-    log.append("status: " + win.status_label.get_label())
+    log.append(f"status: {win.status_label.get_label()} | switch {win.power.get_active()}")
+    win.power.set_active(True)
+    yield 3500
+    log.append(f"switch on -> daemon {cli.daemon_running()} | {win.status_label.get_label()}")
+    win.power.set_active(False)
+    yield 2500
+    log.append(f"switch off -> daemon {cli.daemon_running()} | {win.status_label.get_label()}")
+    shot(win, "1b-off")
     win.add_files([str(TESTDATA / "nasa-earth-ocean.mp4"), str(TESTDATA / "test-image.jpg"), "/etc/hostname"])
     yield 5000
     shot(win, "2-added")
     log.append("cards: " + ", ".join(f"{c.wp.name}({c.wp.kind})" for c in win.cards))
-    pic = next(c for c in win.cards if c.wp.kind == "image")
+    pic = next(c for c in win.cards if c.wp.name == "Test Image")
     pic.emit("clicked")
     yield 3000
     log.append("after picture click: " + win.status_label.get_label())
@@ -56,10 +63,14 @@ def steps(app):
     log.append("highlighted: " + ", ".join(current))
     # clean up what we added
     for c in list(win.cards):
-        if not c.wp.builtin and c.wp.path.parent == gui.const.USER_WALLPAPERS:
+        if c.wp.name in ("Test Image", "Nasa Earth Ocean") and c.wp.path.parent == gui.const.USER_WALLPAPERS:
             app.activate_action("remove", GLib.Variant("s", str(c.wp.path)))
     yield 1500
     log.append("after remove: " + ", ".join(c.wp.name for c in win.cards))
+    log.append(f"switch while running: {win.power.get_active()}")
+    win.power.set_active(False)
+    yield 2500
+    log.append(f"final switch off -> daemon {cli.daemon_running()}")
     shot(win, "4-final")
     app.quit()
 
