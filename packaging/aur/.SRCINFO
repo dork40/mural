@@ -1,6 +1,6 @@
 pkgbase = mural
 	pkgdesc = Live wallpapers for Linux: shaders, videos and pictures on Hyprland, Sway, KDE, GNOME, XFCE and more
-	pkgver = 0.2.1
+	pkgver = 0.3.0
 	pkgrel = 1
 	url = https://github.com/dork40/mural
 	arch = any
@@ -26,7 +26,9 @@ pkgbase = mural
 	optdepends = python-xlib: X11 desktops (XFCE, i3, Openbox, ...)
 	optdepends = python-i3ipc: pause for fullscreen windows on Sway and i3
 	optdepends = gamemode: pause while Feral GameMode is active
-	source = mural-0.2.1.tar.gz::https://github.com/dork40/mural/archive/refs/tags/v0.2.1.tar.gz
-	sha256sums = 4860058d99b59411a446c40e45b740ff5000173d509969f9fa29f680a8310877
+	optdepends = qt6-shadertools: animated wallpapers on the SDDM login screen
+	optdepends = qt6-multimedia: videos on the SDDM login screen
+	source = mural-0.3.0.tar.gz::https://github.com/dork40/mural/archive/refs/tags/v0.3.0.tar.gz
+	sha256sums = 52bd47abe86ad39de73b1258a15d8553135bb1267c53669c6ec44d09226db118
 
 pkgname = mural
