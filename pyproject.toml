@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mural"
-version = "0.2.1"
+version = "0.3.0"
 description = "Live wallpapers for every Linux desktop"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -22,7 +22,7 @@ mural = "mural.cli:main"
 include = ["mural*"]
 
 [tool.setuptools.package-data]
-mural = ["shaders/*.frag", "kwin/*.js"]
+mural = ["shaders/*.frag", "kwin/*.js", "login/*", "videos.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

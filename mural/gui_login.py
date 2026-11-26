@@ -1,0 +1,233 @@
+"""The "Login screen" tab: put a Mural wallpaper behind the SDDM login box."""
+import threading
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+
+from . import library, login  # noqa: E402
+
+KIND_LABEL = {"shader": "Animated", "video": "Video", "image": "Image"}
+QUALITY_KEYS = ["sharp", "balanced", "light"]
+
+
+def _screen_mode():
+    """'1920×1200 at 165 Hz' for the first screen, from what GDK reports."""
+    mons = Gdk.Display.get_default().get_monitors()
+    if not mons.get_n_items():
+        return None
+    m = mons.get_item(0)
+    g, s = m.get_geometry(), m.get_scale()
+    hz = round(m.get_refresh_rate() / 1000)
+    return f"{round(g.width * s)}×{round(g.height * s)} at {hz} Hz"
+
+
+class LoginPage(Gtk.Box):
+    def __init__(self, window):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self.window = window
+        self.walls = []
+        self.preview_view = None
+        self.busy = False
+
+        if not login.sddm_installed():
+            self.append(Adw.StatusPage(icon_name="system-lock-screen-symbolic", vexpand=True,
+                                       title="Your login screen isn't SDDM",
+                                       description="Mural can change the login screen on systems that use SDDM "
+                                                   "(KDE, most Arch and Hyprland setups). Yours uses something else."))
+            return
+
+        page = Adw.PreferencesPage()
+        self.append(page)
+
+        # -- a live preview, with a sketch of the login box over it ----------------------------
+        top = Adw.PreferencesGroup()
+        self.preview_frame = Adw.Bin(height_request=300, css_classes=["login-preview"])
+        self.preview_frame.set_overflow(Gtk.Overflow.HIDDEN)
+        overlay = Gtk.Overlay(child=self.preview_frame)
+        sketch = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, halign=Gtk.Align.START,
+                         valign=Gtk.Align.CENTER, margin_start=36, can_target=False, css_classes=["login-sketch"])
+        self.clock = Gtk.Label(xalign=0, css_classes=["sketch-clock"])
+        sketch.append(self.clock)
+        sketch.append(Gtk.Box(css_classes=["sketch-field"], width_request=190, height_request=24))
+        sketch.append(Gtk.Box(css_classes=["sketch-field", "focus"], width_request=190, height_request=24))
+        overlay.add_overlay(sketch)
+        top.add(overlay)
+        self.now_label = Gtk.Label(xalign=0, wrap=True, css_classes=["dim-label"], margin_top=10)
+        top.add(self.now_label)
+        page.add(top)
+        self._tick_clock()
+        GLib.timeout_add_seconds(20, self._tick_clock)
+
+        # -- choices ---------------------------------------------------------------------------
+        bg = Adw.PreferencesGroup(title="Background",
+                                  description="Animated ones are drawn live, so they run at your screen's full "
+                                              "refresh rate. Videos never make a sound.")
+        self.choice = Adw.ComboRow(title="Wallpaper")
+        self.choice.connect("notify::selected", lambda *_: self._on_choice())
+        bg.add(self.choice)
+        self.quality = Adw.ComboRow(title="Quality", subtitle="Animated backgrounds are soft, so Balanced looks "
+                                                              "the same as Sharp for less GPU",
+                                    model=Gtk.StringList.new(["Sharp", "Balanced", "Light"]))
+        self.quality.set_selected(1)
+        bg.add(self.quality)
+        page.add(bg)
+
+        disp = Adw.PreferencesGroup(title="Screen")
+        mode = _screen_mode()
+        self.refresh = Adw.SwitchRow(title="Full resolution and refresh rate",
+                                     subtitle=f"Your screen: {mode}" if mode else
+                                     "The login screen uses your screen's best mode instead of 60 Hz")
+        self.refresh.set_active(True)
+        disp.add(self.refresh)
+        page.add(disp)
+
+        actions = Adw.PreferencesGroup()
+        box = Gtk.Box(spacing=10, halign=Gtk.Align.END)
+        self.restore_btn = Gtk.Button(label="Put my old login screen back", css_classes=["flat"])
+        self.restore_btn.connect("clicked", lambda *_: self.restore())
+        self.apply_btn = Gtk.Button(label="Use on login screen", css_classes=["suggested-action", "pill"])
+        self.apply_btn.connect("clicked", lambda *_: self.apply())
+        box.append(self.restore_btn)
+        box.append(self.apply_btn)
+        actions.add(box)
+        page.add(actions)
+
+        self.reload()
+
+    # -- data ----------------------------------------------------------------------------------
+    def reload(self):
+        if not hasattr(self, "choice"):
+            return
+        state = login.current_state()
+        self.walls = [w for w in library.list_all() if w.kind == "shader" or w.kind in ("video", "image")]
+        names = [f"{w.name}  ·  {KIND_LABEL[w.kind]}" for w in self.walls]
+        self.choice.set_model(Gtk.StringList.new(names))
+        pick = 0
+        if state["wallpaper"]:
+            pick = next((i for i, w in enumerate(self.walls) if w.name == state["wallpaper"]), 0)
+        self.choice.set_selected(pick)
+        self._show_state(state)
+        self._on_choice()
+
+    def _show_state(self, state):
+        if state["mural"]:
+            text = f"Your login screen now: {state['wallpaper'] or 'Mural'}"
+            if state["full_refresh"]:
+                text += ", at full refresh rate"
+        else:
+            text = f"Your login screen now: the “{state['theme']}” theme. Pick a background and press Use."
+        if not login.sddm_active():
+            text += "\nSDDM is installed but isn't what starts at boot, so you won't see this until it is."
+        self.now_label.set_label(text)
+        self.restore_btn.set_visible(state["mural"])
+
+    def _selected(self):
+        i = self.choice.get_selected()
+        return self.walls[i] if 0 <= i < len(self.walls) else None
+
+    def _on_choice(self):
+        wp = self._selected()
+        self.quality.set_visible(bool(wp and wp.kind == "shader"))
+        if self.preview_view is not None:
+            self.preview_view.stop() if hasattr(self.preview_view, "stop") else None
+        self.preview_view = None
+        if wp is None:
+            self.preview_frame.set_child(None)
+            return
+        from .render import ImageView, ShaderView, VideoView
+        try:
+            if wp.kind == "shader":
+                view = ShaderView(wp.path.read_text(), self.window.palette, fps=60)
+            elif wp.kind == "video":
+                view = VideoView(wp.path)
+            else:
+                view = ImageView(wp.path)
+        except Exception:  # noqa: BLE001 - a broken file just shows no preview
+            view = None
+        self.preview_view = view
+        self.preview_frame.set_child(view)
+        self.set_previewing(self.get_mapped())
+
+    def set_previewing(self, on):
+        """Only animate the preview while this tab is showing."""
+        v = self.preview_view
+        if v is None:
+            return
+        (v.resume if on else v.pause)()
+
+    def _tick_clock(self):
+        self.clock.set_label(GLib.DateTime.new_now_local().format("%-I:%M"))
+        return True
+
+    # -- applying ------------------------------------------------------------------------------
+    def _set_busy(self, on, label=None):
+        self.busy = on
+        self.apply_btn.set_sensitive(not on)
+        self.restore_btn.set_sensitive(not on)
+        self.apply_btn.set_label(label or "Use on login screen")
+
+    def apply(self):
+        wp = self._selected()
+        if wp is None or self.busy:
+            return
+        if wp.kind == "shader" and not login.qsb_path():
+            self.window.toast("Animated login screens need Qt's shader tool (qt6-shadertools)")
+            return
+        self._set_busy(True, "Preparing…")
+        quality = QUALITY_KEYS[self.quality.get_selected()]
+        full = self.refresh.get_active()
+        pal = self.window.palette
+
+        def work():
+            try:
+                theme = login.build_theme(wp, pal, quality)
+                cmd = login.apply_command(theme, full)
+            except Exception as e:  # noqa: BLE001
+                GLib.idle_add(self._done, False, str(e))
+                return
+            GLib.idle_add(self._run, cmd, f"{wp.name} is your login screen now")
+        threading.Thread(target=work, daemon=True).start()
+
+    def restore(self):
+        if self.busy:
+            return
+        try:
+            cmd = login.restore_command()
+        except RuntimeError as e:
+            self.window.toast(str(e))
+            return
+        self._set_busy(True, "Working…")
+        self._run(cmd, "Your old login screen is back")
+
+    def _run(self, cmd, ok_text):
+        self._set_busy(True, "Waiting for your password…")
+        try:
+            proc = Gio.Subprocess.new(cmd, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
+        except GLib.Error as e:
+            self._done(False, e.message)
+            return False
+
+        def finished(p, res):
+            try:
+                _ok, out, _err = p.communicate_utf8_finish(res)
+            except GLib.Error as e:
+                self._done(False, e.message)
+                return
+            code = p.get_exit_status()
+            if code == 0:
+                self._done(True, ok_text)
+            elif code in (126, 127):         # pkexec: dialog dismissed / not authorised
+                self._done(False, "Nothing changed: the password wasn't given")
+            else:
+                self._done(False, (out or "").strip().splitlines()[-1] if out and out.strip() else "It didn't work")
+        proc.communicate_utf8_async(None, None, finished)
+        return False
+
+    def _done(self, ok, text):
+        self._set_busy(False)
+        self.window.toast(text)
+        self._show_state(login.current_state())
+        return False

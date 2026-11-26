@@ -1,0 +1,51 @@
+[
+  {
+    "file": "green-horizon.mp4",
+    "name": "Green Horizon",
+    "about": "Aurora rolling along the edge of the planet",
+    "size": 54182509,
+    "sha256": "bd934d6e5c92c92c46bff270fce629b732efada62142e37389e1ff8a364694b3"
+  },
+  {
+    "file": "northern-lights.mp4",
+    "name": "Northern Lights",
+    "about": "A green aurora curtain rising over the night side",
+    "size": 23181365,
+    "sha256": "1015a22aa6c41b91be8ef2c2fc476bd34638f4398779351353689828522afe69"
+  },
+  {
+    "file": "golden-river.mp4",
+    "name": "Golden River",
+    "about": "A river of golden city lights in the dark",
+    "size": 85482962,
+    "sha256": "6c014063d425f4d244094e0f0f986a913578a42f4c2201e6e54488a0168a06a4"
+  },
+  {
+    "file": "lights-under-aurora.mp4",
+    "name": "Lights Under Aurora",
+    "about": "Night cities with the aurora on the horizon",
+    "size": 20434605,
+    "sha256": "9a028ef19ef16c618c4c6450b0e14dac17e80bdcf1105c380abdb858552dc5ed"
+  },
+  {
+    "file": "airglow.mp4",
+    "name": "Airglow",
+    "about": "The thin glowing line of the atmosphere, with aurora waking up",
+    "size": 7744919,
+    "sha256": "e243179cf817c4790b38cecf05a53da32e0d46ce9b0ae811a481aefea8becd7d"
+  },
+  {
+    "file": "first-light.mp4",
+    "name": "First Light",
+    "about": "The night side turning into sunrise",
+    "size": 14748165,
+    "sha256": "de53b713f31d46d21b38ea816ff67612fe625f02623171600f7565ad423be1c5"
+  },
+  {
+    "file": "night-to-dawn.mp4",
+    "name": "Night to Dawn",
+    "about": "Cities at night, then the first rim of the sun",
+    "size": 24930494,
+    "sha256": "5565144667765cec236d66a4165945a827c14ef10cf078ccc62dc8c277b1162a"
+  }
+]

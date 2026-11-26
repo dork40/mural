@@ -49,7 +49,7 @@ install_deps() {
     case $family in
     arch)
         sudo pacman -S --needed --noconfirm python python-gobject python-cairo gtk4 libadwaita gtk4-layer-shell python-opengl \
-            gst-plugin-gtk4 gst-plugins-base gst-plugins-good gst-libav gst-plugin-va python-xlib python-i3ipc ;;
+            gst-plugin-gtk4 gst-plugins-base gst-plugins-good gst-libav gst-plugin-va python-xlib python-i3ipc qt6-shadertools qt6-multimedia ;;
     fedora)
         local p="python3-gobject python3-cairo gtk4 libadwaita gtk4-layer-shell python3-pyopengl gstreamer1-plugins-base gstreamer1-plugins-good
                  gstreamer1-plugin-gtk4 gstreamer1-plugin-libav gstreamer1-plugins-bad-free python3-xlib python3-i3ipc"
@@ -111,6 +111,9 @@ cat > "$BIN/mural" <<EOF
 PYTHONPATH="$APP\${PYTHONPATH:+:\$PYTHONPATH}" exec /usr/bin/python3 -m mural "\$@"
 EOF
 chmod +x "$BIN/mural"
+
+# the login-screen helper runs as root, so it lives where only root can change it
+sudo install -Dm755 "$src/data/mural-login-helper" "$src/data/sddm-xsetup" -t /usr/lib/mural
 
 DATA=${XDG_DATA_HOME:-$HOME/.local/share}
 install -Dm644 "$src/data/io.github.dork40.Mural.svg" "$DATA/icons/hicolor/scalable/apps/io.github.dork40.Mural.svg"

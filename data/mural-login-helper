@@ -1,0 +1,57 @@
+#!/bin/sh
+# mural-login-helper: the only part of Mural that runs as root. Started through pkexec by the app.
+#   apply <theme-dir> <full-refresh 0|1>   install Mural's login theme from <theme-dir> and switch SDDM to it
+#   restore                                 switch SDDM back to the theme it used before
+set -eu
+THEME=/usr/share/sddm/themes/mural
+CONF_DIR=/etc/sddm.conf.d
+THEME_CONF=$CONF_DIR/zz-mural-theme.conf
+DISPLAY_CONF=$CONF_DIR/zz-mural-display.conf
+XSETUP=/usr/lib/mural/sddm-xsetup
+STATE_DIR=/var/lib/mural
+
+die() { echo "mural-login-helper: $*" >&2; exit 1; }
+
+case ${1:-} in
+apply)
+    src=${2:-}; full=${3:-1}
+    [ -d "$src" ] || die "no theme folder"
+    # only the files a Mural theme has; nothing else is copied
+    for f in Main.qml metadata.desktop theme.conf; do
+        [ -f "$src/$f" ] || die "theme folder is missing $f"
+    done
+    mkdir -p "$STATE_DIR" "$CONF_DIR"
+    if [ ! -f "$STATE_DIR/login-previous-theme" ]; then
+        prev=$(grep -hs '^Current=' /etc/sddm.conf "$CONF_DIR"/*.conf 2>/dev/null | grep -v '=mural$' | tail -1 | cut -d= -f2)
+        echo "${prev:-}" > "$STATE_DIR/login-previous-theme"
+    fi
+    tmp=$(mktemp -d /usr/share/sddm/themes/.mural.XXXXXX)
+    for f in Main.qml metadata.desktop theme.conf background.png background.frag.qsb \
+             background.mp4 background.webm background.mkv background.mov background.m4v \
+             wallpaper.jpg wallpaper.jpeg wallpaper.png wallpaper.webp; do
+        [ -f "$src/$f" ] && install -m644 "$src/$f" "$tmp/$f"
+    done
+    chmod 755 "$tmp"
+    rm -rf "$THEME"; mv "$tmp" "$THEME"
+    printf '[Theme]\nCurrent=mural\n' > "$THEME_CONF"
+    if [ "$full" = 1 ] && [ -x "$XSETUP" ]; then
+        printf '[X11]\n# native resolution at the highest refresh rate (Mural)\nDisplayCommand=%s\n' "$XSETUP" > "$DISPLAY_CONF"
+    else
+        rm -f "$DISPLAY_CONF"
+    fi
+    echo applied
+    ;;
+restore)
+    rm -f "$THEME_CONF" "$DISPLAY_CONF"
+    prev=$(cat "$STATE_DIR/login-previous-theme" 2>/dev/null || true)
+    # if nothing else names a theme any more, put the old one back explicitly
+    if [ -n "$prev" ] && ! grep -qs '^Current=' /etc/sddm.conf "$CONF_DIR"/*.conf; then
+        printf '[Theme]\nCurrent=%s\n' "$prev" > "$CONF_DIR/zz-mural-restored.conf"
+    fi
+    rm -f "$STATE_DIR/login-previous-theme"
+    echo restored
+    ;;
+*)
+    die "usage: apply <theme-dir> <0|1> | restore"
+    ;;
+esac

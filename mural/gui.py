@@ -37,6 +37,7 @@ CSS = """
 .wall-card.current .thumb-frame { outline: 2px solid @accent_color; outline-offset: 2px; }
 .wall-card:hover .thumb-frame { background: alpha(@window_fg_color, 0.1); }
 .wall-card .name { font-weight: 600; }
+.kind-badge.get { background: alpha(@accent_bg_color, 0.92); color: @accent_fg_color; }
 .kind-badge { background: alpha(black, 0.62); color: white; border-radius: 6px; padding: 3px 8px;
               font-size: 0.85em; font-weight: 700; margin: 8px; }
 .status-line { padding: 6px 18px 10px 18px; }
@@ -45,6 +46,10 @@ CSS = """
 .status-dot.off { background: alpha(@window_fg_color, 0.3); }
 .section-title { font-weight: 700; font-size: 1.05em; margin: 18px 18px 6px 18px; }
 .empty-hint { opacity: 0.55; margin: 0 18px 12px 18px; }
+.login-preview { border-radius: 14px; background: black; }
+.login-sketch .sketch-clock { font-size: 42px; font-weight: 300; color: white; }
+.sketch-field { border-radius: 7px; background: alpha(black, 0.55); border: 1px solid alpha(white, 0.15); }
+.sketch-field.focus { border-color: @accent_color; }
 """
 
 
@@ -228,6 +233,79 @@ class Card(Gtk.Button):
         (self.add_css_class if on else self.remove_css_class)("current")
 
 
+class DownloadCard(Gtk.Button):
+    """A video that isn't on this computer yet: click to download it into your wallpapers."""
+
+    def __init__(self, clip, window):
+        super().__init__(css_classes=["wall-card", "flat"], tooltip_text=f"{clip.about}. Click to download "
+                                                                         f"({clip.size / 1e6:.0f} MB).")
+        self.clip = clip
+        self.window = window
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        frame = Adw.Bin(css_classes=["thumb-frame"], height_request=150, width_request=220)
+        frame.set_overflow(Gtk.Overflow.HIDDEN)
+        self.pic = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True)
+        frame.set_child(self.pic)
+        overlay = Gtk.Overlay(child=frame)
+        badge = Gtk.Box(spacing=5, css_classes=["kind-badge"], halign=Gtk.Align.START, valign=Gtk.Align.START,
+                        can_target=False)
+        badge.append(Gtk.Image(icon_name="camera-video-symbolic", pixel_size=12))
+        badge.append(Gtk.Label(label="Video"))
+        overlay.add_overlay(badge)
+        self.get_btn = Gtk.Box(spacing=6, css_classes=["kind-badge", "get"], halign=Gtk.Align.END,
+                               valign=Gtk.Align.END, can_target=False)
+        self.get_btn.append(Gtk.Image(icon_name="folder-download-symbolic", pixel_size=14))
+        self.get_label = Gtk.Label(label=f"{clip.size / 1e6:.0f} MB")
+        self.get_btn.append(self.get_label)
+        overlay.add_overlay(self.get_btn)
+        self.bar = Gtk.ProgressBar(valign=Gtk.Align.END, visible=False, css_classes=["osd"], margin_start=8,
+                                   margin_end=8, margin_bottom=8, can_target=False)
+        overlay.add_overlay(self.bar)
+        box.append(overlay)
+        row = Gtk.Box(spacing=6, margin_start=4, margin_end=4)
+        row.append(Gtk.Label(label=clip.name, xalign=0, hexpand=True, ellipsize=3, css_classes=["name"]))
+        box.append(row)
+        self.set_child(box)
+        self.connect("clicked", lambda *_: self.start())
+        self.busy = False
+
+        def thumb():
+            from . import catalog
+            path = catalog.thumbnail(clip)
+            GLib.idle_add(lambda: path and self.pic.set_filename(str(path)) and False)
+        threading.Thread(target=thumb, daemon=True).start()
+
+    def start(self):
+        if self.busy:
+            return
+        self.busy = True
+        self.get_btn.set_visible(False)
+        self.bar.set_visible(True)
+        from . import catalog
+
+        def progress(done, total):
+            GLib.idle_add(lambda: self.bar.set_fraction(done / total if total else 0) and False)
+
+        def work():
+            try:
+                path = catalog.download(self.clip, progress)
+                GLib.idle_add(self.finished, path, None)
+            except Exception as e:  # noqa: BLE001
+                GLib.idle_add(self.finished, None, str(e))
+        threading.Thread(target=work, daemon=True).start()
+
+    def finished(self, path, err):
+        self.busy = False
+        if err:
+            self.bar.set_visible(False)
+            self.get_btn.set_visible(True)
+            self.window.toast(f"Couldn't download {self.clip.name}: {err}")
+            return False
+        self.window.toast(f"{self.clip.name} is in your videos now")
+        self.window.build_grid()
+        return False
+
+
 # -- main window -------------------------------------------------------------------------------
 class Window(Adw.ApplicationWindow):
     def __init__(self, app):
@@ -259,19 +337,31 @@ class Window(Adw.ApplicationWindow):
         header.pack_start(self.screen_dd)
         view.add_top_bar(header)
 
-
         status = Gtk.Box(spacing=8, css_classes=["status-line"])
         self.dot = Gtk.Box(css_classes=["status-dot"], valign=Gtk.Align.CENTER)
         self.status_label = Gtk.Label(xalign=0, css_classes=["dim-label"])
         status.append(self.dot)
         status.append(self.status_label)
-        view.add_top_bar(status)
 
         self.toasts = Adw.ToastOverlay()
         self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_bottom=18)
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
         scroll.set_child(Adw.Clamp(maximum_size=1300, child=self.content))
-        self.toasts.set_child(scroll)
+        wall_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        wall_page.append(status)
+        wall_page.append(scroll)
+
+        # two tabs: the desktop wallpaper, and the login screen
+        from .gui_login import LoginPage
+        self.stack = Adw.ViewStack()
+        self.stack.add_titled_with_icon(wall_page, "wallpaper", "Wallpaper", "preferences-desktop-wallpaper-symbolic")
+        self.login_page = LoginPage(self)
+        self.stack.add_titled_with_icon(self.login_page, "login", "Login screen", "system-lock-screen-symbolic")
+        self.stack.connect("notify::visible-child-name", lambda *_: self._on_tab())
+        header.set_title_widget(Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE))
+        self._wall_only = [self.power, add, self.pause_btn, self.screen_dd]
+
+        self.toasts.set_child(self.stack)
         view.set_content(self.toasts)
         self.set_content(view)
 
@@ -297,6 +387,20 @@ class Window(Adw.ApplicationWindow):
         self._watches.append(mon)
         GLib.timeout_add_seconds(3, self._poll)      # notices the daemon stopping or crashing
 
+    def toast(self, text, timeout=3):
+        self.toasts.add_toast(Adw.Toast(title=text, timeout=timeout))
+
+    def _on_tab(self):
+        on_login = self.stack.get_visible_child_name() == "login"
+        for w in self._wall_only:
+            if w is self.screen_dd:
+                w.set_visible(not on_login and len(getattr(self, "_screens", [])) > 2)
+            else:
+                w.set_visible(not on_login)
+        self.login_page.set_previewing(on_login)
+        if on_login:
+            self.login_page.reload()
+
     # -- grid ------------------------------------------------------------------------------
     def build_grid(self):
         for card in self.cards:
@@ -311,6 +415,7 @@ class Window(Adw.ApplicationWindow):
         self._section("Animated", animated, None)
         self._section("Your videos and images", mine,
                       "Drop videos or images here, or use the + button.")
+        self._free_section()
         self.mark_current()
         return False
 
@@ -327,6 +432,21 @@ class Window(Adw.ApplicationWindow):
             card = Card(wp, self)
             self.cards.append(card)
             flow.append(card)
+        self.content.append(flow)
+
+    def _free_section(self):
+        from . import catalog
+        todo = [c for c in catalog.CLIPS if not catalog.installed(c)]
+        if not todo:
+            return
+        self.content.append(Gtk.Label(label="Free videos", xalign=0, css_classes=["section-title"]))
+        self.content.append(Gtk.Label(label="Earth from the Space Station, in 4K, from NASA. Each one loops "
+                                            "without a seam.", xalign=0, wrap=True, css_classes=["empty-hint"]))
+        flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True, min_children_per_line=2,
+                           max_children_per_line=6, column_spacing=14, row_spacing=14,
+                           margin_start=18, margin_end=18)
+        for clip in todo:
+            flow.append(DownloadCard(clip, self))
         self.content.append(flow)
 
     def mark_current(self):
