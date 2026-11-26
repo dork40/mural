@@ -37,6 +37,16 @@ def steps(app):
     log.append("header buttons hidden: " + str([w.get_visible() for w in win._wall_only]))
     log.append("choices: " + ", ".join(f"{w.name}({w.kind})" for w in page.walls))
     shot(win, "login-tab")
+    log.append("mode loaded: " + page._mode() + "  rates: " + str(page._rates()))
+    for sel, rate in ((1, 0), (2, 2), (3, 0), (0, 0)):
+        page.res_row.set_selected(sel)
+        page.rate_row.set_selected(rate)
+        yield 200
+        log.append(f"res {sel} rate {rate} -> {page._mode()}  (rate row shown={page.rate_row.get_visible()})")
+    page._load_mode(login.login_display())
+    yield 300
+    adj = page.get_first_child().get_vadjustment() if hasattr(page.get_first_child(), "get_vadjustment") else None
+    shot(win, "login-mode")
     for i, w in enumerate(page.walls):
         page.choice.set_selected(i)
         yield 1800
@@ -44,7 +54,7 @@ def steps(app):
         shot(win, f"login-{i}")
     theme = login.build_theme(page.walls[0], win.palette, "balanced", dest="/tmp/mural-login-built")
     log.append("built: " + ", ".join(sorted(p.name for p in theme.iterdir())))
-    log.append("command: " + " ".join(login.apply_command(theme, True)))
+    log.append("command: " + " ".join(login.apply_command(theme, page._mode())))
     win.stack.set_visible_child_name("wallpaper")
     yield 800
     log.append("back on wallpaper tab, header buttons: " + str([w.get_visible() for w in win._wall_only]))

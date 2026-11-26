@@ -52,3 +52,31 @@ def test_catalog_entries_are_complete():
     for c in catalog.CLIPS:
         assert c.file.endswith(".mp4") and c.name and c.size > 1_000_000 and len(c.sha256) == 64
         assert c.url.startswith("https://github.com/dork40/mural/releases/download/")
+
+
+def test_apply_command_passes_the_mode(monkeypatch, tmp_path):
+    monkeypatch.setattr(login, "helper_path", lambda: tmp_path / "h")
+    assert login.apply_command(tmp_path, "1920x1200@165")[-1] == "1920x1200@165"
+    assert login.apply_command(tmp_path, True)[-1] == "auto"
+    assert login.apply_command(tmp_path, False)[-1] == "off"
+
+
+def test_login_display_reads_the_saved_mode(monkeypatch, tmp_path):
+    conf, ld = tmp_path / "d.conf", tmp_path / "ld"
+    monkeypatch.setattr(login, "DISPLAY_CONF", conf)
+    monkeypatch.setattr(login, "LOGIN_DISPLAY", ld)
+    assert login.login_display() == "off"
+    conf.write_text("x")
+    ld.write_text("auto\n")
+    assert login.login_display() == "auto"
+    ld.write_text("1920x1200 165.01\n")
+    assert login.login_display() == (1920, 1200, 165)
+    ld.write_text("1280x720 max\n")
+    assert login.login_display() == (1280, 720, "max")
+
+
+def test_helper_refuses_odd_modes():
+    import subprocess
+    h = const.HERE.parent / "data" / "mural-login-helper"
+    r = subprocess.run(["sh", str(h), "apply", "/nonexistent", "1x1;reboot"], capture_output=True, text=True)
+    assert r.returncode != 0

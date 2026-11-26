@@ -77,7 +77,11 @@ def _read_sddm_conf():
 
 
 def current_state():
-    """What the login screen is set to now: {"theme", "mural", "wallpaper", "full_refresh"}."""
+    """What the login screen is set to now:
+    {"theme", "mural", "wallpaper", "full_refresh", "mode"}.
+
+    "mode" is None when the login screen is left on its default 60 Hz, "auto" when it uses each
+    screen's best mode, or a "WIDTHxHEIGHT@RATE" string when a specific mode was chosen."""
     cp = _read_sddm_conf()
     theme = cp.get("Theme", "Current", fallback="")
     wallpaper = None
@@ -89,7 +93,97 @@ def current_state():
         except (configparser.Error, OSError):
             pass
     return {"theme": theme or "default", "mural": theme == THEME_NAME, "wallpaper": wallpaper,
-            "full_refresh": DISPLAY_CONF.exists()}
+            "full_refresh": DISPLAY_CONF.exists(), "mode": _configured_mode(cp)}
+
+
+def _configured_mode(cp):
+    """Read the login-screen mode back from SDDM's DisplayCommand, or None if it's the default."""
+    if not DISPLAY_CONF.exists():
+        return None
+    cmd = cp.get("X11", "DisplayCommand", fallback="")
+    parts = cmd.split()
+    if len(parts) >= 3 and "x" in parts[1]:        # /usr/lib/mural/sddm-xsetup 1920x1200 165
+        return f"{parts[1]}@{parts[2]}"
+    return "auto"
+
+
+# -- enumerating the screen's real modes ----------------------------------------------------
+def _parse_rate(text):
+    try:
+        return round(float(text.strip().rstrip("Hz*+ ")), 2)
+    except ValueError:
+        return None
+
+
+def _modes_from_hyprctl():
+    """availableModes from Hyprland, e.g. '1920x1200@165.00Hz'."""
+    import json
+    try:
+        out = subprocess.run(["hyprctl", "-j", "monitors"], capture_output=True, text=True,
+                             timeout=5).stdout
+        mons = json.loads(out)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return []
+    modes = []
+    for m in mons:
+        for s in m.get("availableModes", []):
+            try:
+                res, rate = s.split("@")
+                w, h = res.split("x")
+                r = _parse_rate(rate)
+                if r:
+                    modes.append((int(w), int(h), r))
+            except (ValueError, TypeError):
+                continue
+    return modes
+
+
+def _modes_from_xrandr():
+    """Every mode xrandr lists for connected outputs (a real X session only)."""
+    try:
+        out = subprocess.run(["xrandr", "--query"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    modes, on = [], False
+    for line in out.splitlines():
+        if " connected" in line:
+            on = True
+            continue
+        if line and not line[0].isspace():
+            on = False
+            continue
+        if not on:
+            continue
+        parts = line.split()
+        if not parts or "x" not in parts[0]:
+            continue
+        try:
+            w, h = parts[0].split("x")
+            w, h = int(w), int(h)
+        except ValueError:
+            continue
+        for tok in parts[1:]:
+            r = _parse_rate(tok)
+            if r:
+                modes.append((w, h, r))
+    return modes
+
+
+def available_modes():
+    """A sorted, de-duplicated list of (width, height, rate) the login screen could use.
+
+    Tries Hyprland, then a real X session (xrandr); returns [] when neither can be asked (the
+    app still offers the automatic best-mode option in that case)."""
+    modes = _modes_from_hyprctl() or _modes_from_xrandr()
+    seen, uniq = set(), []
+    for w, h, r in modes:
+        key = (w, h, r)
+        if key not in seen:
+            seen.add(key)
+            uniq.append(key)
+    # biggest screen first, then fastest refresh
+    uniq.sort(key=lambda m: (m[0] * m[1], m[2]), reverse=True)
+    return uniq
 
 
 # -- shaders: Mural's GLSL -> Qt's ShaderEffect GLSL ---------------------------------------------
@@ -189,11 +283,94 @@ def build_theme(wallpaper, palette, quality="balanced", dest=None):
     return dest
 
 
-def apply_command(theme_dir, full_refresh=True):
+def apply_command(theme_dir, mode="auto"):
+    """mode: "off", "auto", or "1920x1200@165" / "1920x1200@max"."""
     helper = helper_path()
     if helper is None:
         raise RuntimeError("Mural's login-screen helper is missing; reinstall Mural")
-    return ["pkexec", str(helper), "apply", str(theme_dir), "1" if full_refresh else "0"]
+    if mode is True:
+        mode = "auto"
+    elif mode is False:
+        mode = "off"
+    return ["pkexec", str(helper), "apply", str(theme_dir), mode]
+
+
+# -- screen modes the login screen can use -----------------------------------------------------
+LOGIN_DISPLAY = Path("/etc/mural/login-display")
+
+
+def _modes_hyprland():
+    import json
+    out = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True, timeout=3).stdout
+    modes = {}
+    for m in json.loads(out)[:1]:
+        for s in m.get("availableModes", []):
+            res, _, hz = s.partition("@")
+            w, h = res.split("x")
+            modes.setdefault((int(w), int(h)), set()).add(round(float(hz.rstrip("Hz"))))
+    return modes
+
+
+def _modes_xrandr():
+    out = subprocess.run(["xrandr", "--query"], capture_output=True, text=True, timeout=3).stdout
+    modes, on = {}, False
+    for line in out.splitlines():
+        if " connected" in line:
+            if modes:
+                break
+            on = True
+            continue
+        if not line.startswith(" ") or not on:
+            on = on and line.startswith(" ")
+            continue
+        parts = line.split()
+        if "x" not in parts[0]:
+            continue
+        w, h = parts[0].split("x")[:2]
+        rates = {round(float(r.strip("*+"))) for r in parts[1:] if r.strip("*+").replace(".", "").isdigit()}
+        modes.setdefault((int(w), int(h.rstrip("i"))), set()).update(rates)
+    return modes
+
+
+def _modes_kscreen():
+    import json
+    out = subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=3).stdout
+    modes = {}
+    for o in json.loads(out).get("outputs", []):
+        if o.get("connected") and o.get("enabled"):
+            for m in o.get("modes", []):
+                modes.setdefault((m["size"]["width"], m["size"]["height"]), set()).add(round(m["refreshRate"]))
+            break
+    return modes
+
+
+def screen_modes():
+    """The first screen's modes, as [((w, h), [rates high to low]), ...], biggest first."""
+    import shutil
+    for tool, fn in (("hyprctl", _modes_hyprland), ("kscreen-doctor", _modes_kscreen), ("xrandr", _modes_xrandr)):
+        if shutil.which(tool):
+            try:
+                modes = fn()
+            except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+                continue
+            if modes:
+                return sorted(((k, sorted(v, reverse=True)) for k, v in modes.items()),
+                              key=lambda kv: (-kv[0][0] * kv[0][1], -kv[0][0]))
+    return []
+
+
+def login_display():
+    """What the login screen's mode is set to: "off", "auto", or (w, h, rate|"max")."""
+    if not DISPLAY_CONF.exists():
+        return "off"
+    try:
+        words = LOGIN_DISPLAY.read_text().split()
+    except OSError:
+        return "auto"
+    if len(words) == 2 and "x" in words[0]:
+        w, h = words[0].split("x")
+        return (int(w), int(h), words[1] if words[1] == "max" else round(float(words[1])))
+    return "auto"
 
 
 def restore_command():

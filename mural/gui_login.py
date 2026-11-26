@@ -13,17 +13,6 @@ KIND_LABEL = {"shader": "Animated", "video": "Video", "image": "Image"}
 QUALITY_KEYS = ["sharp", "balanced", "light"]
 
 
-def _screen_mode():
-    """'1920×1200 at 165 Hz' for the first screen, from what GDK reports."""
-    mons = Gdk.Display.get_default().get_monitors()
-    if not mons.get_n_items():
-        return None
-    m = mons.get_item(0)
-    g, s = m.get_geometry(), m.get_scale()
-    hz = round(m.get_refresh_rate() / 1000)
-    return f"{round(g.width * s)}×{round(g.height * s)} at {hz} Hz"
-
-
 class LoginPage(Gtk.Box):
     def __init__(self, window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
@@ -75,14 +64,22 @@ class LoginPage(Gtk.Box):
         bg.add(self.quality)
         page.add(bg)
 
-        disp = Adw.PreferencesGroup(title="Screen")
-        mode = _screen_mode()
-        self.refresh = Adw.SwitchRow(title="Full resolution and refresh rate",
-                                     subtitle=f"Your screen: {mode}" if mode else
-                                     "The login screen uses your screen's best mode instead of 60 Hz")
-        self.refresh.set_active(True)
-        disp.add(self.refresh)
+        disp = Adw.PreferencesGroup(title="Screen",
+                                    description="SDDM normally starts the login screen at 60 Hz. Pick what it "
+                                                "should use instead.")
+        self.modes = login.screen_modes()
+        best = self.modes[0] if self.modes else None
+        res_names = ["Leave it to SDDM",
+                     f"Best for this screen ({best[0][0]}×{best[0][1]}, {best[1][0]} Hz)" if best else
+                     "Best for this screen"]
+        res_names += [f"{w}×{h}" for (w, h), _ in self.modes]
+        self.res_row = Adw.ComboRow(title="Resolution", model=Gtk.StringList.new(res_names))
+        self.rate_row = Adw.ComboRow(title="Refresh rate")
+        self.res_row.connect("notify::selected", lambda *_: self._on_res())
+        disp.add(self.res_row)
+        disp.add(self.rate_row)
         page.add(disp)
+        self._load_mode(login.login_display())
 
         actions = Adw.PreferencesGroup()
         box = Gtk.Box(spacing=10, halign=Gtk.Align.END)
@@ -96,6 +93,55 @@ class LoginPage(Gtk.Box):
         page.add(actions)
 
         self.reload()
+
+    # -- screen mode ---------------------------------------------------------------------------
+    def _rates(self):
+        i = self.res_row.get_selected() - 2
+        return self.modes[i][1] if 0 <= i < len(self.modes) else []
+
+    def _on_res(self):
+        rates = self._rates()
+        self.rate_row.set_visible(bool(rates))
+        self.rate_row.set_model(Gtk.StringList.new(["Highest"] + [f"{r} Hz" for r in rates]))
+        self.rate_row.set_selected(0)
+
+    def _load_mode(self, cur):
+        if cur == "off":
+            self.res_row.set_selected(0)
+        elif cur == "auto":
+            self.res_row.set_selected(1)
+        else:
+            w, h, rate = cur
+            i = next((n for n, (wh, _) in enumerate(self.modes) if wh == (w, h)), None)
+            if i is None:
+                self.res_row.set_selected(1)
+            else:
+                self.res_row.set_selected(i + 2)
+                self._on_res()
+                rates = self._rates()
+                if rate != "max" and rate in rates:
+                    self.rate_row.set_selected(rates.index(rate) + 1)
+        self._on_res() if self.res_row.get_selected() < 2 else None
+
+    def _mode(self):
+        """The choice as the helper takes it: off | auto | 1920x1200@165 | 1920x1200@max."""
+        sel = self.res_row.get_selected()
+        if sel == 0:
+            return "off"
+        if sel == 1 or not self._rates():
+            return "auto"
+        (w, h), rates = self.modes[sel - 2]
+        r = self.rate_row.get_selected()
+        return f"{w}x{h}@{'max' if r == 0 else rates[r - 1]}"
+
+    @staticmethod
+    def mode_text(cur):
+        if cur == "off":
+            return ""
+        if cur == "auto":
+            return ", best resolution and refresh rate"
+        w, h, rate = cur
+        return f", {w}×{h} at {'the highest refresh rate' if rate == 'max' else f'{rate} Hz'}"
 
     # -- data ----------------------------------------------------------------------------------
     def reload(self):
@@ -115,8 +161,7 @@ class LoginPage(Gtk.Box):
     def _show_state(self, state):
         if state["mural"]:
             text = f"Your login screen now: {state['wallpaper'] or 'Mural'}"
-            if state["full_refresh"]:
-                text += ", at full refresh rate"
+            text += self.mode_text(login.login_display())
         else:
             text = f"Your login screen now: the “{state['theme']}” theme. Pick a background and press Use."
         if not login.sddm_active():
@@ -178,13 +223,13 @@ class LoginPage(Gtk.Box):
             return
         self._set_busy(True, "Preparing…")
         quality = QUALITY_KEYS[self.quality.get_selected()]
-        full = self.refresh.get_active()
+        mode = self._mode()
         pal = self.window.palette
 
         def work():
             try:
                 theme = login.build_theme(wp, pal, quality)
-                cmd = login.apply_command(theme, full)
+                cmd = login.apply_command(theme, mode)
             except Exception as e:  # noqa: BLE001
                 GLib.idle_add(self._done, False, str(e))
                 return

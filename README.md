@@ -58,8 +58,8 @@ Then open **Mural** from your app menu.
 
 The **Login screen** tab puts a Mural wallpaper behind your login box: pick one, press **Use on
 login screen**, type your password. Animated ones are drawn live by your graphics card, so they
-move at your screen's full refresh rate. **Full resolution and refresh rate** also gets the login
-screen off 60 Hz and onto your screen's best mode. **Put my old login screen back** undoes it.
+move at your screen's full refresh rate. Under **Screen** you can also get the login
+screen off 60 Hz: pick a resolution and refresh rate, or let Mural use your screen's best one. **Put my old login screen back** undoes it.
 
 This works where SDDM is the login screen (KDE, and most Arch and Hyprland setups).
 
