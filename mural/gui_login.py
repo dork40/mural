@@ -85,9 +85,14 @@ class LoginPage(Gtk.Box):
         box = Gtk.Box(spacing=10, halign=Gtk.Align.END)
         self.restore_btn = Gtk.Button(label="Put my old login screen back", css_classes=["flat"])
         self.restore_btn.connect("clicked", lambda *_: self.restore())
+        self.preview_btn = Gtk.Button(label="Preview", css_classes=["pill"])
+        self.preview_btn.set_tooltip_text("Show the login screen in a window, exactly as SDDM draws it "
+                                          "(press Esc to close it). Doesn't change anything.")
+        self.preview_btn.connect("clicked", lambda *_: self.preview())
         self.apply_btn = Gtk.Button(label="Use on login screen", css_classes=["suggested-action", "pill"])
         self.apply_btn.connect("clicked", lambda *_: self.apply())
         box.append(self.restore_btn)
+        box.append(self.preview_btn)
         box.append(self.apply_btn)
         actions.add(box)
         page.add(actions)
@@ -212,6 +217,7 @@ class LoginPage(Gtk.Box):
         self.busy = on
         self.apply_btn.set_sensitive(not on)
         self.restore_btn.set_sensitive(not on)
+        self.preview_btn.set_sensitive(not on)
         self.apply_btn.set_label(label or "Use on login screen")
 
     def apply(self):
@@ -235,6 +241,50 @@ class LoginPage(Gtk.Box):
                 return
             GLib.idle_add(self._run, cmd, f"{wp.name} is your login screen now")
         threading.Thread(target=work, daemon=True).start()
+
+    def preview(self):
+        """Build the chosen theme and open it in SDDM's own greeter, in a window. No root, no changes."""
+        wp = self._selected()
+        if wp is None or self.busy:
+            return
+        if wp.kind == "shader" and not login.qsb_path():
+            self.window.toast("Animated login screens need Qt's shader tool (qt6-shadertools)")
+            return
+        if login.greeter_path() is None:
+            self.window.toast("SDDM's greeter isn't installed, so there's nothing to preview with")
+            return
+        self.preview_btn.set_sensitive(False)
+        self.preview_btn.set_label("Preparing…")
+        quality = QUALITY_KEYS[self.quality.get_selected()]
+        pal = self.window.palette
+        from . import const
+
+        def work():
+            try:
+                theme = login.build_theme(wp, pal, quality, dest=const.CACHE_DIR / "preview-theme")
+                cmd = login.preview_command(theme)
+            except Exception as e:  # noqa: BLE001
+                GLib.idle_add(self._preview_done, str(e))
+                return
+            GLib.idle_add(self._launch_preview, cmd)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _launch_preview(self, cmd):
+        try:
+            Gio.Subprocess.new(cmd, Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE)
+        except GLib.Error as e:
+            self._preview_done(e.message)
+            return False
+        self._preview_done(None)
+        self.window.toast("Preview open — press Esc to close it")
+        return False
+
+    def _preview_done(self, err):
+        self.preview_btn.set_sensitive(True)
+        self.preview_btn.set_label("Preview")
+        if err:
+            self.window.toast(err)
+        return False
 
     def restore(self):
         if self.busy:

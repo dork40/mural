@@ -62,6 +62,27 @@ def helper_path():
     return None
 
 
+GREETER_CANDIDATES = ["sddm-greeter-qt6", "sddm-greeter", "/usr/bin/sddm-greeter-qt6",
+                      "/usr/bin/sddm-greeter", "/usr/lib/sddm/sddm-greeter"]
+
+
+def greeter_path():
+    """SDDM's greeter binary, used to show the login screen in a test window. None if absent."""
+    for c in GREETER_CANDIDATES:
+        p = c if os.path.isabs(c) else shutil.which(c)
+        if p and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def preview_command(theme_dir):
+    """Show <theme_dir> the way SDDM would, in a throwaway window (no root, press Esc to close)."""
+    greeter = greeter_path()
+    if greeter is None:
+        raise RuntimeError("SDDM's greeter isn't installed, so there's nothing to preview with")
+    return [greeter, "--test-mode", "--theme", str(theme_dir)]
+
+
 def _read_sddm_conf():
     """All SDDM settings, merged the way SDDM merges them (later files win)."""
     cp = configparser.ConfigParser(strict=False, interpolation=None)

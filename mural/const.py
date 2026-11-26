@@ -5,7 +5,7 @@ APP_ID = "io.github.dork40.Mural"
 DAEMON_ID = "io.github.dork40.Mural.Daemon"
 DAEMON_PATH = "/io/github/dork40/Mural/Daemon"
 APP_NAME = "Mural"
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 HERE = Path(__file__).resolve().parent
 BUILTIN_SHADERS = HERE / "shaders"

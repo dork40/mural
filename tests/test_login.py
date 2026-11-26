@@ -54,6 +54,18 @@ def test_catalog_entries_are_complete():
         assert c.url.startswith("https://github.com/dork40/mural/releases/download/")
 
 
+def test_preview_command_uses_the_greeter_in_test_mode(monkeypatch):
+    monkeypatch.setattr(login, "greeter_path", lambda: "/usr/bin/sddm-greeter-qt6")
+    cmd = login.preview_command("/tmp/theme")
+    assert cmd == ["/usr/bin/sddm-greeter-qt6", "--test-mode", "--theme", "/tmp/theme"]
+
+
+def test_preview_command_without_a_greeter_explains_why(monkeypatch):
+    monkeypatch.setattr(login, "greeter_path", lambda: None)
+    with pytest.raises(RuntimeError):
+        login.preview_command("/tmp/theme")
+
+
 def test_apply_command_passes_the_mode(monkeypatch, tmp_path):
     monkeypatch.setattr(login, "helper_path", lambda: tmp_path / "h")
     assert login.apply_command(tmp_path, "1920x1200@165")[-1] == "1920x1200@165"
