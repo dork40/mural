@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Mural
-Comment=Live wallpaper
-Exec=mural start
-NoDisplay=true
-X-GNOME-Autostart-Phase=Applications

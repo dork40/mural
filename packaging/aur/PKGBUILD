@@ -1,12 +1,12 @@
 # Maintainer: dork40 <gregoryscotland@gmail.com>
 pkgname=mural
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Live wallpapers for Linux: shaders, videos and pictures on Hyprland, Sway, KDE, GNOME, XFCE and more"
 arch=('any')
 url="https://github.com/dork40/mural"
 license=('GPL-3.0-or-later')
-depends=('python' 'python-gobject' 'python-cairo' 'glib2' 'gdk-pixbuf2' 'gtk4' 'gtk4-layer-shell' 'python-opengl'
+depends=('python' 'python-gobject' 'python-cairo' 'glib2' 'gdk-pixbuf2' 'gtk4' 'libadwaita' 'gtk4-layer-shell' 'python-opengl'
          'gst-plugin-gtk4' 'gst-plugins-base' 'gst-plugins-good' 'gst-libav')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 optdepends=('gst-plugin-va: hardware video decoding (much less CPU)'
@@ -14,7 +14,7 @@ optdepends=('gst-plugin-va: hardware video decoding (much less CPU)'
             'python-i3ipc: pause for fullscreen windows on Sway and i3'
             'gamemode: pause while Feral GameMode is active')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('2aa939600fd72f9e5aa9654682e120494cab9f9410aabecbf6ea5bde6957d0e9')
+sha256sums=('SKIP')
 
 build() {
     cd "$pkgname-$pkgver"
@@ -31,6 +31,7 @@ package() {
     python -m installer --destdir="$pkgdir" dist/*.whl
     install -d "$pkgdir/usr/share/gnome-shell/extensions"
     cp -r gnome-extension/mural@dork40.github.io "$pkgdir/usr/share/gnome-shell/extensions/"
-    install -Dm644 packaging/mural.desktop "$pkgdir/etc/xdg/autostart/mural.desktop"
+    install -Dm644 data/io.github.dork40.Mural.desktop -t "$pkgdir/usr/share/applications"
+    install -Dm644 data/io.github.dork40.Mural.svg -t "$pkgdir/usr/share/icons/hicolor/scalable/apps"
     install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 }

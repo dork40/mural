@@ -195,9 +195,9 @@ def main(argv=None):
     sub.add_parser("snapshot", help="save each screen's current frame to ~/.cache/mural").set_defaults(
         func=cmd_simple("snapshot"))
     args = ap.parse_args(argv)
-    if not args.cmd:
-        ap.print_help()
-        return 0
+    if not args.cmd:                      # plain `mural` (and the app menu) opens the window
+        from .gui import main as gui_main
+        return gui_main()
     return args.func(args)
 
 

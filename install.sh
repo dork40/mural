@@ -25,7 +25,10 @@ die() { printf '%serror:%s %s\n' "$b" "$r" "$*" >&2; exit 1; }
 
 if [[ ${1:-} == --uninstall ]]; then
     "$BIN/mural" stop >/dev/null 2>&1 || true
-    rm -rf "$APP" "$BIN/mural" "$AUTOSTART" "$EXT_DIR"
+    systemctl --user disable --now mural.service >/dev/null 2>&1 || true
+    rm -rf "$APP" "$BIN/mural" "$AUTOSTART" "$EXT_DIR" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/mural.service" \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/applications/io.github.dork40.Mural.desktop" \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/io.github.dork40.Mural.svg"
     say "Mural removed. Your settings are still in ~/.config/mural and ~/.local/share/mural."
     exit 0
 fi
@@ -45,10 +48,10 @@ done
 install_deps() {
     case $family in
     arch)
-        sudo pacman -S --needed --noconfirm python python-gobject python-cairo gtk4 gtk4-layer-shell python-opengl \
+        sudo pacman -S --needed --noconfirm python python-gobject python-cairo gtk4 libadwaita gtk4-layer-shell python-opengl \
             gst-plugin-gtk4 gst-plugins-base gst-plugins-good gst-libav gst-plugin-va python-xlib python-i3ipc ;;
     fedora)
-        local p="python3-gobject python3-cairo gtk4 gtk4-layer-shell python3-pyopengl gstreamer1-plugins-base gstreamer1-plugins-good
+        local p="python3-gobject python3-cairo gtk4 libadwaita gtk4-layer-shell python3-pyopengl gstreamer1-plugins-base gstreamer1-plugins-good
                  gstreamer1-plugin-gtk4 gstreamer1-plugin-libav gstreamer1-plugins-bad-free python3-xlib python3-i3ipc"
         if [[ -e /run/ostree-booted ]]; then
             note "atomic system (Silverblue/Bazzite/...): layering with rpm-ostree, a reboot finishes it"
@@ -60,7 +63,7 @@ install_deps() {
         fi ;;
     debian)
         sudo apt-get update -q
-        local p="python3 python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 python3-opengl
+        local p="python3 python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 python3-opengl
                  gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav gstreamer1.0-gtk4
                  python3-xlib python3-i3ipc"
         # layer-shell and VA-API decoding are newer packages: add them when the release has them
@@ -70,7 +73,7 @@ install_deps() {
         # shellcheck disable=SC2086
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y $p ;;
     suse)
-        sudo zypper -n install python3-gobject python3-gobject-cairo typelib-1_0-Gtk-4_0 gtk4-layer-shell typelib-1_0-Gtk4LayerShell-1_0 \
+        sudo zypper -n install python3-gobject python3-gobject-cairo typelib-1_0-Gtk-4_0 typelib-1_0-Adw-1 gtk4-layer-shell typelib-1_0-Gtk4LayerShell-1_0 \
             python3-PyOpenGL gstreamer-plugins-base gstreamer-plugins-good gstreamer-plugin-gtk4 gstreamer-plugins-libav \
             python3-python-xlib python3-i3ipc ;;
     *)
@@ -109,16 +112,11 @@ PYTHONPATH="$APP\${PYTHONPATH:+:\$PYTHONPATH}" exec /usr/bin/python3 -m mural "\
 EOF
 chmod +x "$BIN/mural"
 
-mkdir -p "$(dirname "$AUTOSTART")"
-cat > "$AUTOSTART" <<EOF
-[Desktop Entry]
-Type=Application
-Name=Mural
-Comment=Live wallpaper
-Exec=$BIN/mural start
-X-GNOME-Autostart-Phase=Applications
-NoDisplay=true
-EOF
+DATA=${XDG_DATA_HOME:-$HOME/.local/share}
+install -Dm644 "$src/data/io.github.dork40.Mural.svg" "$DATA/icons/hicolor/scalable/apps/io.github.dork40.Mural.svg"
+mkdir -p "$DATA/applications"
+sed "s|^Exec=mural$|Exec=$BIN/mural|" "$src/data/io.github.dork40.Mural.desktop" > "$DATA/applications/io.github.dork40.Mural.desktop"
+update-desktop-database -q "$DATA/applications" 2>/dev/null || true
 
 desk=${XDG_CURRENT_DESKTOP:-}
 if [[ ${desk,,} == *gnome* ]] || command -v gnome-shell >/dev/null; then
@@ -126,27 +124,11 @@ if [[ ${desk,,} == *gnome* ]] || command -v gnome-shell >/dev/null; then
     rm -rf "$EXT_DIR"; mkdir -p "$(dirname "$EXT_DIR")"
     cp -r "$src/gnome-extension/$EXT_UUID" "$EXT_DIR"
     gnome-extensions enable "$EXT_UUID" 2>/dev/null ||
-        note "log out and back in, then run: gnome-extensions enable $EXT_UUID"
+        note "log out and back in once to finish setting up Mural on GNOME"
 fi
 
 # -- check it runs ----------------------------------------------------------------------
-/usr/bin/python3 -c 'import gi; gi.require_version("Gtk","4.0"); gi.require_version("Gst","1.0"); from gi.repository import Gtk, Gst; import OpenGL' \
+/usr/bin/python3 -c 'import gi; gi.require_version("Gtk","4.0"); gi.require_version("Adw","1"); gi.require_version("Gst","1.0"); from gi.repository import Gtk, Adw, Gst; import OpenGL' \
     || die "a dependency is missing (see the error above)"
 
-case :$PATH: in *":$BIN:"*) ;; *) note "add ~/.local/bin to your PATH to use the 'mural' command" ;; esac
-
-if [[ -n ${WAYLAND_DISPLAY:-}${DISPLAY:-} ]]; then
-    "$BIN/mural" start >/dev/null 2>&1 && say "Mural is running." || note "start it with: mural start"
-fi
-
-cat <<EOF
-
-${b}Mural is installed.${r}
-    mural list                  see the wallpapers
-    mural set aurora            a built-in one
-    mural set ~/Videos/rain.mp4 a video (always silent) or any picture
-    mural pause / resume        (it also pauses by itself for games and fullscreen apps)
-
-    It starts with your desktop. On Hyprland, Sway, i3 and other window managers without
-    autostart, add this to your config instead:   exec-once = mural start   (Sway/i3: exec mural start)
-EOF
+printf '\n%sMural is installed.%s Open it from your app menu to pick a wallpaper.\n' "$b" "$r"

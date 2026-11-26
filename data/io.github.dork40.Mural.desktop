@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Mural
+GenericName=Live Wallpaper
+Comment=Animated, video and picture wallpapers
+Exec=mural
+Icon=io.github.dork40.Mural
+Terminal=false
+Categories=Settings;DesktopSettings;GTK;
+Keywords=wallpaper;background;live;animated;video;shader;
+StartupNotify=true
