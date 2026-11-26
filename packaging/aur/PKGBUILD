@@ -16,7 +16,7 @@ optdepends=('gst-plugin-va: hardware video decoding (much less CPU)'
             'qt6-shadertools: animated wallpapers on the SDDM login screen'
             'qt6-multimedia: videos on the SDDM login screen')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('3662e1bbde845f9812aad105ef713c6cc423b905f4fbb6eb17a9f8d0d75d623f')
+sha256sums=('ea71868b2ba5e0ea15649ead4a2f6c1e1aa445dbc54491a3235d9544d8f4a2b7')
 
 build() {
     cd "$pkgname-$pkgver"
